@@ -27,3 +27,12 @@ pip3 install --upgrade --user minerl
 
 # Download world
 python3 scripts/download_world.py
+
+# Add environment variable if not existent
+if ! grep -q "MINERL_DATA_ROOT" ~/.bashrc; then\
+    echo 'Adding MINERL_DATA_ROOT environment variable to bashrc'
+    echo -e '\n# Minecraft reinforcement learning configuration' >> ~/.bashrc
+    echo 'export MINERL_DATA_ROOT='`pwd`'/res' >> ~/.bashrc
+else
+    echo "MINERL_DATA_ROOT environment variable already existed."
+fi
