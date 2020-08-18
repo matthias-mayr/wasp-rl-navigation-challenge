@@ -36,8 +36,10 @@ def q_network(input, num_actions, scope, reuse=False):
 
 def train_policy(arglist):
     with U.single_threaded_session():
+        # Create the environment
         env = gym.make('MineRLNavigate-v0')
         env = MineCraftWrapper(env)
+
         # Create all the functions necessary to train the model
         # TODO: Add arguments for train hyper parameters
         act, train, update_target, debug = deepq.build_train(
@@ -46,8 +48,10 @@ def train_policy(arglist):
             num_actions=env.action_space.n,
             optimizer=tf.train.AdamOptimizer(learning_rate=5e-4),
         )
+
         # Create the replay buffer
         replay_buffer = ReplayBuffer(arglist.replay_buffer_len)
+
         # Create the schedule for exploration starting from 1 (every action is random) down to
         # 0.02 (98% of actions are selected according to values predicted by the model).
         exploration = LinearSchedule(schedule_timesteps=arglist.num_exploration_steps, initial_p=1.0, final_p=arglist.final_epsilon)
@@ -61,10 +65,12 @@ def train_policy(arglist):
         n_steps = 0
         obs = env.reset()
         for episode in range(arglist.num_episodes):
+
             # Take action and update exploration to the newest value
             action = act(obs[None], update_eps=exploration.value(n_steps))[0]
             new_obs, rew, done, _ = env.step(action)
             n_steps += 1
+
             # Store transition in the replay buffer.
             replay_buffer.add(obs, action, rew, new_obs, float(done))
             obs = new_obs
@@ -73,15 +79,18 @@ def train_policy(arglist):
             if done:
                 obs = env.reset()
                 episode_rewards.append(0)
+                n_episodes += 1
 
             # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
             if n_steps > arglist.learning_starts_at_steps:
                 obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(32)
                 train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
+
             # Update target network periodically.
             if n_steps % arglist.target_net_update_freq == 0:
                 update_target()
 
+            # Log data for analysis
             if done and len(episode_rewards) % 10 == 0:
                 logger.record_tabular("steps", n_steps)
                 logger.record_tabular("episodes", len(episode_rewards))
