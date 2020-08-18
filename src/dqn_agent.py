@@ -35,7 +35,7 @@ def q_network(input, num_actions, scope, reuse=False):
     raise NotImplementedError
 
 def train_policy(arglist):
-    with U.make_session(num_cpu=8):
+    with U.single_threaded_session():
         env = gym.make('MineRLNavigate-v0')
         env = MineCraftWrapper(env)
         # Create all the functions necessary to train the model
