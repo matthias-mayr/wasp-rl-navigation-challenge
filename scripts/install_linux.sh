@@ -7,6 +7,10 @@ cd `git rev-parse --show-toplevel`
 git submodule init
 git submodule update
 
+# install baselines
+pip3 install -e depends/baselines
+
+
 # minerl repo
 # Get distribution environment variables
 . /etc/lsb-release
