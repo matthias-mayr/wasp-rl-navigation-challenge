@@ -134,44 +134,46 @@ def train_policy(arglist):
         log_path = "./learning_curves/minerl_" + str(date.today()) + "_" + str(time.time()) + ".dat"
         log_file = open(log_path, "a")
         for episode in range(arglist.num_episodes):
+            done = False
+            while not done:
+                # Take action and update exploration to the newest value
+                action = act(obs[None], update_eps=exploration.value(n_steps))[0]
+                new_obs, rew, done, _ = env.step(action)
+                n_steps += 1
 
-            # Take action and update exploration to the newest value
-            action = act(obs[None], update_eps=exploration.value(n_steps))[0]
-            new_obs, rew, done, _ = env.step(action)
-            n_steps += 1
+                # Store transition in the replay buffer.
+                replay_buffer.add(obs, action, rew, new_obs, float(done))
+                obs = new_obs
 
-            # Store transition in the replay buffer.
-            replay_buffer.add(obs, action, rew, new_obs, float(done))
-            obs = new_obs
+                # Store rewards
+                episode_rewards[-1] += rew
+                if done:
+                    obs = env.reset()
+                    episode_rewards.append(0)
+                    n_episodes += 1
 
-            episode_rewards[-1] += rew
-            if done:
-                obs = env.reset()
-                episode_rewards.append(0)
-                n_episodes += 1
+                # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
+                if (n_steps > arglist.learning_starts_at_steps) and (n_steps % 4 == 0):
+                    obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(32)
+                    train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
 
-            # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
-            if (n_steps > arglist.learning_starts_at_steps) and (n_steps % 4 == 0):
-                obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(32)
-                train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
+                # Update target network periodically.
+                if n_steps % arglist.target_net_update_freq == 0:
+                    update_target()
 
-            # Update target network periodically.
-            if n_steps % arglist.target_net_update_freq == 0:
-                update_target()
+                # Log data for analysis
+                if done and len(episode_rewards) % 10 == 0:
+                    logger.record_tabular("steps", n_steps)
+                    logger.record_tabular("episodes", len(episode_rewards))
+                    logger.record_tabular("mean episode reward", round(np.mean(episode_rewards[-101:-1]), 1))
+                    logger.record_tabular("% time spent exploring", int(100 * exploration.value(n_steps)))
+                    logger.dump_tabular()
+                    print("%s,%s,%s,%s" % (n_steps,episode,round(np.mean(episode_rewards[-101:-1]), 1),int(100 * exploration.value(n_steps))), file=log_file)
 
-            # Log data for analysis
-            if done and len(episode_rewards) % 10 == 0:
-                logger.record_tabular("steps", n_steps)
-                logger.record_tabular("episodes", len(episode_rewards))
-                logger.record_tabular("mean episode reward", round(np.mean(episode_rewards[-101:-1]), 1))
-                logger.record_tabular("% time spent exploring", int(100 * exploration.value(n_steps)))
-                logger.dump_tabular()
-                print("%s,%s,%s,%s" % (n_steps,episode,round(np.mean(episode_rewards[-101:-1]), 1),int(100 * exploration.value(n_steps))), file=log_file)
-
-            #TODO: Save checkpoints
-            if episode % arglist.checkpoint_rate == 0:
-                checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
-                save_variables(checkpoint_path)
+                #TODO: Save checkpoints
+                if n_steps % arglist.checkpoint_rate == 0:
+                    checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
+                    save_variables(checkpoint_path)
                 
         log_file.close()
 
