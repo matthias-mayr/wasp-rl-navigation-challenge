@@ -1,3 +1,6 @@
-[submodule "lth-block-world"]
-	path = lth-block-world
+[submodule "depends/baselines"]
+	path = depends/baselines
+	url = https://github.com/openai/baselines
+[submodule "res/lth-block-world"]
+	path = res/lth-block-world
 	url = https://github.com/lunduniversity/lth-block-world
