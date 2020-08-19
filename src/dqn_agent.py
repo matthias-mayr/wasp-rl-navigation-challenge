@@ -31,7 +31,7 @@ class MineCraftWrapper:
     """Wrap the action and observation spaces of the MineCraft environment."""
     def __init__(self, minecraft_env):
         self.minecraft_env = minecraft_env
-        self.action_space = Discrete(8)
+        self.action_space = Discrete(9)
         #Actions:
         #0: attack
         #1: back
@@ -41,6 +41,7 @@ class MineCraftWrapper:
         #5: forward and jump
         #6: left
         #7: right
+        #8: no-op
         self.observation_space = Box(low=0.0, high=1.0, shape=(64, 64, 2))
         #Observations (feature layers):
         #Grey scale image
