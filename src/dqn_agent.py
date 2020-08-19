@@ -6,7 +6,10 @@ Created on Tue Aug 18 14:46:14 2020
 """
 import argparse
 import gym
+from gym.spaces import Box, Discrete
 import minerl
+import time
+from datetime import date
 
 import numpy as np
 
@@ -17,18 +20,74 @@ import baselines.common.tf_util as U
 
 from baselines import logger
 from baselines import deepq
+from baselines.deepq.models import build_q_func
 from baselines.deepq.replay_buffer import ReplayBuffer
 from baselines.deepq.utils import ObservationInput
 from baselines.common.schedules import LinearSchedule
+import cv2
 
 class MineCraftWrapper:
     """Wrap the action and observation spaces of the MineCraft environment."""
     def __init__(self, minecraft_env):
         self.minecraft_env = minecraft_env
+		self.action_space = Discrete(8)
+		#Actions:
+		#0: attack
+		#1: back
+		#2: camera left
+		#3: camera right
+		#4: forward
+		#5: forward and jump
+		#6: left
+		#7: right
+		self.observation_space = Box(low=0.0, high=1.0, shape=(64, 64, 2))
+		#Observations (feature layers):
+		#Grey scale image
+		#compassAngle
+		
+	def step(self, action):
+		minerl_action = self.action_to_minerl_action(action)
+		minerl_obs, rew, done, info = self.minecraft_env.step(minerl_action)
+		return self.minerl_obs_to_obs(minerl_obs), rew, done, info
+		
+	def action_to_minerl_action(self, action):
+	    minerl_action = self.minecraft_env.action_space.noop()
+    
+		if action==0:
+			minerl_action['attack'] = 1
+		elif action==1:
+			minerl_action['back'] = 1
+		elif action==2:
+			minerl_action['camera'] = [0, 10.0]
+		elif action==3:
+			minerl_action['camera'] = [0, -10.0]
+		elif action==4:
+			minerl_action['forward'] = 1
+		elif action==5:
+			minerl_action['forward'] = 1
+			minerl_action['jump'] = 1
+		elif action==6:
+			minerl_action['left'] = 1
+		elif action==7:
+			minerl_action['right'] = 1
+			
+		return minerl_action
+		
+	def minerl_obs_to_obs(self, minerl_obs):
+		obs = np.ones(shape=(64,64,2))
+		obs[:,:,0] = self.preprocess_image_frame(minerl_obs["pov"])
+		obs[:,:,1] = obs[:,:,1] * ((minerl_obs["compassAngle"] + 180.0)/360.0)
 
-def preprocess_image_frame():
-    """Preprocess image frame given from the environment."""
-    raise NotImplementedError
+		return obs
+		
+	def preprocess_image_frame(self, pov):
+		"""Preprocess image frame given from the environment."""
+		grayscale_img = cv2.cvtColor(pov, cv2.COLOR_BGR2GRAY)
+		grayscale_img = grayscale_img.astype('float64')/255.0
+		return grayscale_img
+		
+	def reset(self):
+		return self.minerl_obs_to_obs(self.minecraft_env.reset())
 
 def q_network(input, num_actions, scope, reuse=False):
     """Build a neural network for the q function."""
@@ -41,15 +100,15 @@ def train_policy(arglist):
         env = MineCraftWrapper(env)
 
         # Create all the functions necessary to train the model
-        # TODO: Add arguments for train hyper parameters
         act, train, update_target, debug = deepq.build_train(
             make_obs_ph=lambda name: ObservationInput(env.observation_space, name=name),
-            q_func=q_network,
+            q_func=build_q_func('conv_only', dueling=True),
             num_actions=env.action_space.n,
+			gamma=0.9,
             optimizer=tf.train.AdamOptimizer(learning_rate=5e-4),
         )
 
-        # Create the replay buffer
+        # Create the replay buffer (TODO: Use prioritized replay buffer)
         replay_buffer = ReplayBuffer(arglist.replay_buffer_len)
 
         # Create the schedule for exploration starting from 1 (every action is random) down to
@@ -82,7 +141,7 @@ def train_policy(arglist):
                 n_episodes += 1
 
             # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
-            if n_steps > arglist.learning_starts_at_steps:
+            if (n_steps > arglist.learning_starts_at_steps) and (n_steps % 4 == 0):
                 obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(32)
                 train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
 
@@ -99,10 +158,14 @@ def train_policy(arglist):
                 logger.dump_tabular()
 
             #TODO: Save checkpoints
+			if episode % arglist.checkpoint_rate == 0:
+				checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
+				act.save(checkpoint_path)
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train DQN policy.')
     parser.add_argument("--num-episodes", type=int, default=50000, help="number of episodes to use for training")
+	parser.add_argument("--checkpoint-rate", type=int, default=10000, help="number of episodes to use for training")
     parser.add_argument("--replay-buffer-len", type=int, default=1000000, help="length of replay buffer")
     parser.add_argument("--num-exploration-steps", type=int, default=25000, help="number of time steps to use for exploration")
     parser.add_argument("--learning-starts-at-steps", type=int, default=10000, help="number of time steps before learning starts")
