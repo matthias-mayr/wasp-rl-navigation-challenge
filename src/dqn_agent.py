@@ -123,6 +123,8 @@ def train_policy(arglist):
         n_episodes = 0
         n_steps = 0
         obs = env.reset()
+        log_path = "./learning_curves/minerl_" + str(date.today()) + "_" + str(time.time()) + ".dat"
+        log_file = open(log_path, "a")
         for episode in range(arglist.num_episodes):
 
             # Take action and update exploration to the newest value
@@ -156,11 +158,14 @@ def train_policy(arglist):
                 logger.record_tabular("mean episode reward", round(np.mean(episode_rewards[-101:-1]), 1))
                 logger.record_tabular("% time spent exploring", int(100 * exploration.value(n_steps)))
                 logger.dump_tabular()
+                print("%s,%s,%s,%s" % (n_steps,episode,round(np.mean(episode_rewards[-101:-1]), 1),int(100 * exploration.value(n_steps))), file=log_file)
 
             #TODO: Save checkpoints
 			if episode % arglist.checkpoint_rate == 0:
 				checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
 				act.save(checkpoint_path)
+                
+        log_file.close()
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train DQN policy.')
@@ -171,6 +176,7 @@ def parse_args():
     parser.add_argument("--learning-starts-at-steps", type=int, default=10000, help="number of time steps before learning starts")
     parser.add_argument("--target-net-update-freq", type=int, default=1000, help="update frequency of the target network")
     parser.add_argument("--final-epsilon", type=float, default=0.02, help="final epsilon")
+    parser.add_argument("--use-demonstrations", action="store_true", default=True)
     return parser.parse_args()
 
 if __name__ == '__main__':
