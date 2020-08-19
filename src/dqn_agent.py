@@ -17,6 +17,7 @@ import tensorflow as tf
 import tensorflow.contrib.layers as layers
 
 import baselines.common.tf_util as U
+from baselines.common.tf_util import save_variables
 
 from baselines import logger
 from baselines import deepq
@@ -163,7 +164,7 @@ def train_policy(arglist):
             #TODO: Save checkpoints
             if episode % arglist.checkpoint_rate == 0:
                 checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
-                act.save(checkpoint_path)
+                save_variables(checkpoint_path)
                 
         log_file.close()
 
