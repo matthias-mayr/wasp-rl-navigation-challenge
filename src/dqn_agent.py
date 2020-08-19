@@ -98,7 +98,13 @@ def q_network(input, num_actions, scope, reuse=False):
 def train_policy(arglist):
     with U.single_threaded_session():
         # Create the environment
-        env = gym.make('MineRLNavigate-v0')
+        if arglist.use_dense_rewards:
+            print("Will use env MineRLNavigateDense-v0")
+            env = gym.make("MineRLNavigateDense-v0")          
+        else:
+            print("Will use env MineRLNavigate-v0")
+            env = gym.make('MineRLNavigate-v0')  
+
         env = MineCraftWrapper(env)
 
         # Create all the functions necessary to train the model
@@ -178,7 +184,8 @@ def parse_args():
     parser.add_argument("--learning-starts-at-steps", type=int, default=10000, help="number of time steps before learning starts")
     parser.add_argument("--target-net-update-freq", type=int, default=1000, help="update frequency of the target network")
     parser.add_argument("--final-epsilon", type=float, default=0.02, help="final epsilon")
-    parser.add_argument("--use-demonstrations", action="store_true", default=True)
+    parser.add_argument("--use-demonstrations", action="store_true", default=False)
+    parser.add_argument("--use-dense-rewards", action="store_true", default=False)
     return parser.parse_args()
 
 if __name__ == '__main__':
