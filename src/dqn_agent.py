@@ -30,64 +30,64 @@ class MineCraftWrapper:
     """Wrap the action and observation spaces of the MineCraft environment."""
     def __init__(self, minecraft_env):
         self.minecraft_env = minecraft_env
-		self.action_space = Discrete(8)
-		#Actions:
-		#0: attack
-		#1: back
-		#2: camera left
-		#3: camera right
-		#4: forward
-		#5: forward and jump
-		#6: left
-		#7: right
-		self.observation_space = Box(low=0.0, high=1.0, shape=(64, 64, 2))
-		#Observations (feature layers):
-		#Grey scale image
-		#compassAngle
-		
-	def step(self, action):
-		minerl_action = self.action_to_minerl_action(action)
-		minerl_obs, rew, done, info = self.minecraft_env.step(minerl_action)
-		return self.minerl_obs_to_obs(minerl_obs), rew, done, info
-		
-	def action_to_minerl_action(self, action):
-	    minerl_action = self.minecraft_env.action_space.noop()
+        self.action_space = Discrete(8)
+        #Actions:
+        #0: attack
+        #1: back
+        #2: camera left
+        #3: camera right
+        #4: forward
+        #5: forward and jump
+        #6: left
+        #7: right
+        self.observation_space = Box(low=0.0, high=1.0, shape=(64, 64, 2))
+        #Observations (feature layers):
+        #Grey scale image
+        #compassAngle
+        
+    def step(self, action):
+        minerl_action = self.action_to_minerl_action(action)
+        minerl_obs, rew, done, info = self.minecraft_env.step(minerl_action)
+        return self.minerl_obs_to_obs(minerl_obs), rew, done, info
+        
+    def action_to_minerl_action(self, action):
+        minerl_action = self.minecraft_env.action_space.noop()
     
-		if action==0:
-			minerl_action['attack'] = 1
-		elif action==1:
-			minerl_action['back'] = 1
-		elif action==2:
-			minerl_action['camera'] = [0, 10.0]
-		elif action==3:
-			minerl_action['camera'] = [0, -10.0]
-		elif action==4:
-			minerl_action['forward'] = 1
-		elif action==5:
-			minerl_action['forward'] = 1
-			minerl_action['jump'] = 1
-		elif action==6:
-			minerl_action['left'] = 1
-		elif action==7:
-			minerl_action['right'] = 1
-			
-		return minerl_action
-		
-	def minerl_obs_to_obs(self, minerl_obs):
-		obs = np.ones(shape=(64,64,2))
-		obs[:,:,0] = self.preprocess_image_frame(minerl_obs["pov"])
-		obs[:,:,1] = obs[:,:,1] * ((minerl_obs["compassAngle"] + 180.0)/360.0)
+        if action==0:
+            minerl_action['attack'] = 1
+        elif action==1:
+            minerl_action['back'] = 1
+        elif action==2:
+            minerl_action['camera'] = [0, 10.0]
+        elif action==3:
+            minerl_action['camera'] = [0, -10.0]
+        elif action==4:
+            minerl_action['forward'] = 1
+        elif action==5:
+            minerl_action['forward'] = 1
+            minerl_action['jump'] = 1
+        elif action==6:
+            minerl_action['left'] = 1
+        elif action==7:
+            minerl_action['right'] = 1
+            
+        return minerl_action
+        
+    def minerl_obs_to_obs(self, minerl_obs):
+        obs = np.ones(shape=(64,64,2))
+        obs[:,:,0] = self.preprocess_image_frame(minerl_obs["pov"])
+        obs[:,:,1] = obs[:,:,1] * ((minerl_obs["compassAngle"] + 180.0)/360.0)
 
-		return obs
-		
-	def preprocess_image_frame(self, pov):
-		"""Preprocess image frame given from the environment."""
-		grayscale_img = cv2.cvtColor(pov, cv2.COLOR_BGR2GRAY)
-		grayscale_img = grayscale_img.astype('float64')/255.0
-		return grayscale_img
-		
-	def reset(self):
-		return self.minerl_obs_to_obs(self.minecraft_env.reset())
+        return obs
+        
+    def preprocess_image_frame(self, pov):
+        """Preprocess image frame given from the environment."""
+        grayscale_img = cv2.cvtColor(pov, cv2.COLOR_BGR2GRAY)
+        grayscale_img = grayscale_img.astype('float64')/255.0
+        return grayscale_img
+        
+    def reset(self):
+        return self.minerl_obs_to_obs(self.minecraft_env.reset())
 
 def q_network(input, num_actions, scope, reuse=False):
     """Build a neural network for the q function."""
@@ -104,7 +104,7 @@ def train_policy(arglist):
             make_obs_ph=lambda name: ObservationInput(env.observation_space, name=name),
             q_func=build_q_func('conv_only', dueling=True),
             num_actions=env.action_space.n,
-			gamma=0.9,
+            gamma=0.9,
             optimizer=tf.train.AdamOptimizer(learning_rate=5e-4),
         )
 
@@ -161,16 +161,16 @@ def train_policy(arglist):
                 print("%s,%s,%s,%s" % (n_steps,episode,round(np.mean(episode_rewards[-101:-1]), 1),int(100 * exploration.value(n_steps))), file=log_file)
 
             #TODO: Save checkpoints
-			if episode % arglist.checkpoint_rate == 0:
-				checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
-				act.save(checkpoint_path)
+            if episode % arglist.checkpoint_rate == 0:
+                checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
+                act.save(checkpoint_path)
                 
         log_file.close()
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train DQN policy.')
     parser.add_argument("--num-episodes", type=int, default=50000, help="number of episodes to use for training")
-	parser.add_argument("--checkpoint-rate", type=int, default=10000, help="number of episodes to use for training")
+    parser.add_argument("--checkpoint-rate", type=int, default=10000, help="number of episodes to use for training")
     parser.add_argument("--replay-buffer-len", type=int, default=1000000, help="length of replay buffer")
     parser.add_argument("--num-exploration-steps", type=int, default=25000, help="number of time steps to use for exploration")
     parser.add_argument("--learning-starts-at-steps", type=int, default=10000, help="number of time steps before learning starts")
