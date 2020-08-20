@@ -10,6 +10,7 @@ from gym.spaces import Box, Discrete
 import minerl
 import time
 from datetime import date
+import random
 
 import numpy as np
 
@@ -78,7 +79,34 @@ class MineCraftWrapper:
             minerl_action['right'] = 1
             
         return minerl_action
-        
+
+    def minerl_action_to_action(self, minerl_action):
+        actions = []
+
+        if minerl_action['attack'] == 1:
+            actions.append(0)
+        elif minerl_action['back'] == 1:
+            actions.append(1)
+        elif minerl_action['camera'][1] > 10.0:
+            actions.append(2)
+        elif minerl_action['camera'][1] < -10.0:
+            actions.append(3)
+        elif minerl_action['forward'] == 1:
+            actions.append(4)
+        elif minerl_action['forward'] == 1 and minerl_action['jump'] == 1:
+            actions.append(5)
+        elif minerl_action['left'] == 1:
+            actions.append(6)
+        elif minerl_action['right'] == 1:
+            actions.append(7)
+
+        if len(actions) > 0:
+            action = random.choice(actions)
+        else:
+            action = 8
+            
+        return action
+
     def minerl_obs_to_obs(self, minerl_obs):
         obs = np.ones(shape=(64,64,2))
         obs[:,:,0] = self.preprocess_image_frame(minerl_obs["pov"])
@@ -99,15 +127,60 @@ def q_network(input, num_actions, scope, reuse=False):
     """Build a neural network for the q function."""
     raise NotImplementedError
 
+def load_demo_buffer(env_name, max_items):
+    env_wrapper = MineCraftWrapper(None)
+    demo_buffer = ReplayBuffer(arglist.replay_buffer_len)
+    data = minerl.data.make(environment=env_name, data_dir="../data")
+
+    print("#############################################")
+    print("Loading demonstrations")
+    print("#############################################")
+    items = 0
+    for current_state, action, reward, next_state, done in data.batch_iter(batch_size=1, num_epochs=1, seq_len=30):
+        for step in range(len(reward)):
+            minerl_obs = {
+                'pov': current_state['pov'][0][step],
+                'compassAngle': current_state['compassAngle'][0][step]
+            }            
+            obs = env_wrapper.minerl_obs_to_obs(minerl_obs)
+            minerl_new_obs = {
+                'pov': next_state['pov'][0][step],
+                'compassAngle': next_state['compassAngle'][0][step]
+            }
+            new_obs = env_wrapper.minerl_obs_to_obs(minerl_new_obs)
+            minerl_action = {
+                'attack': action['attack'][0][step],
+                'back': action['back'][0][step],
+                'camera': action['camera'][0][step],
+                'forward': action['forward'][0][step],
+                'jump': action['jump'][0][step],
+                'left': action['left'][0][step],
+                'right': action['right'][0][step]
+            }
+            action = env_wrapper.minerl_action_to_action(minerl_action)
+            demo_buffer.add(obs, action, reward[0][step], new_obs, float(done[0][step]))
+
+        items += 1
+        if items >= max_items:
+            break
+
+    print("#############################################")
+    print("Finished loading demonstrations")
+    print("#############################################")
+    
+    return demo_buffer
+
 def train_policy(arglist):
     with U.single_threaded_session():
         # Create the environment
         if arglist.use_dense_rewards:
             print("Will use env MineRLNavigateDense-v0")
-            env = gym.make("MineRLNavigateDense-v0")          
+            env = gym.make("MineRLNavigateDense-v0")    
+            env_name = "MineRLNavigateDense-v0"     
         else:
             print("Will use env MineRLNavigate-v0")
-            env = gym.make('MineRLNavigate-v0')  
+            env = gym.make('MineRLNavigate-v0')
+            env_name = "MineRLNavigate-v0"   
 
         env = MineCraftWrapper(env)
 
@@ -120,8 +193,12 @@ def train_policy(arglist):
             optimizer=tf.train.AdamOptimizer(learning_rate=5e-4),
         )
 
-        # Create the replay buffer (TODO: Use prioritized replay buffer)
-        replay_buffer = ReplayBuffer(arglist.replay_buffer_len)
+        # Create the replay buffer(s) (TODO: Use prioritized replay buffer)
+        if arglist.use_demonstrations:
+            replay_buffer = ReplayBuffer(int(arglist.replay_buffer_len/2))
+            demo_buffer = load_demo_buffer(env_name, int(arglist.replay_buffer_len/2))
+        else:
+            replay_buffer = ReplayBuffer(arglist.replay_buffer_len)
 
         # Create the schedule for exploration starting from 1 (every action is random) down to
         # 0.02 (98% of actions are selected according to values predicted by the model).
@@ -141,17 +218,6 @@ def train_policy(arglist):
             print("Episode: ", str(episode))
             done = False
             while not done:
-            # gives a single float value
-                #psutil.cpu_percent()
-                # gives an object with many fields
-                #psutil.virtual_memory()
-                # you can convert that object to a dictionary 
-                #dict(psutil.virtual_memory()._asdict())
-                # you can have the percentage of used RAM
-                #print(psutil.virtual_memory().percent)
-                #print("%d bytes" % (obs.size * obs.itemsize))
-                
-                #print(sys.getsizeof(replay_buffer))
                 
                 # Take action and update exploration to the newest value
                 action = act(obs[None], update_eps=exploration.value(n_steps))[0]
@@ -168,11 +234,19 @@ def train_policy(arglist):
                     obs = env.reset()
                     episode_rewards.append(0)
                     n_episodes += 1
-
+          
                 # Minimize the error in Bellman's equation on a batch sampled from replay buffer.
                 if (n_steps > arglist.learning_starts_at_steps) and (n_steps % 4 == 0):
                     obses_t, actions, rewards, obses_tp1, dones = replay_buffer.sample(32)
                     train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
+
+                if arglist.use_demonstrations:
+                    if (n_steps < arglist.learning_starts_at_steps) and (n_steps % 4 == 0):
+                        obses_t, actions, rewards, obses_tp1, dones = demo_buffer.sample(32)
+                        train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
+                    if (n_steps > arglist.learning_starts_at_steps) and (n_steps % 4 == 0):
+                        obses_t, actions, rewards, obses_tp1, dones = demo_buffer.sample(32)
+                        train(obses_t, actions, rewards, obses_tp1, dones, np.ones_like(rewards))
 
                 # Update target network periodically.
                 if n_steps % arglist.target_net_update_freq == 0:
