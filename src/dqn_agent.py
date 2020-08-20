@@ -207,7 +207,7 @@ def q_network(input, num_actions, scope, reuse=False):
 def load_demo_buffer(env_name, max_items):
     env_wrapper = MineCraftWrapper(None)
     demo_buffer = ReplayBuffer(arglist.replay_buffer_len)
-    data = minerl.data.make(environment=env_name, data_dir="../data")
+    data = minerl.data.make(environment=env_name, data_dir="./res")
 
     print("#############################################")
     print("Loading demonstrations")
