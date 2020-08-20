@@ -7,10 +7,6 @@ cd `git rev-parse --show-toplevel`
 git submodule init
 git submodule update
 
-# install baselines
-pip3 install -e depends/baselines
-
-
 # minerl repo
 # Get distribution environment variables
 . /etc/lsb-release
@@ -23,11 +19,14 @@ else
     echo "openJDK repo exists already."
 fi
 sudo apt update
-sudo apt install openjdk-8-jdk cmake
+sudo apt install openjdk-8-jdk cmake xvfb
 
 # install minerl
 pip3 install --user scikit-build
 pip3 install --upgrade --user minerl
+
+# install baselines
+pip3 install -e depends/baselines
 
 # Download world
 python3 scripts/download_world.py
