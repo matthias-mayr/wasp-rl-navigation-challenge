@@ -27,6 +27,10 @@ from baselines.deepq.utils import ObservationInput
 from baselines.common.schedules import LinearSchedule
 import cv2
 
+import psutil
+import sys
+
+
 class MineCraftWrapper:
     """Wrap the action and observation spaces of the MineCraft environment."""
     def __init__(self, minecraft_env):
@@ -121,7 +125,7 @@ def train_policy(arglist):
 
         # Create the schedule for exploration starting from 1 (every action is random) down to
         # 0.02 (98% of actions are selected according to values predicted by the model).
-        exploration = LinearSchedule(schedule_timesteps=arglist.num_exploration_steps, initial_p=1.0, final_p=arglist.final_epsilon)
+        exploration = LinearSchedule(schedule_timesteps=arglist.num_exploration_steps*arglist.num_episodes*4000, initial_p=1.0, final_p=arglist.final_epsilon)
 
         # Initialize the parameters and copy them to the target network.
         U.initialize()
@@ -134,8 +138,21 @@ def train_policy(arglist):
         log_path = "./learning_curves/minerl_" + str(date.today()) + "_" + str(time.time()) + ".dat"
         log_file = open(log_path, "a")
         for episode in range(arglist.num_episodes):
+            print("Episode: ", str(episode))
             done = False
             while not done:
+            # gives a single float value
+                #psutil.cpu_percent()
+                # gives an object with many fields
+                #psutil.virtual_memory()
+                # you can convert that object to a dictionary 
+                #dict(psutil.virtual_memory()._asdict())
+                # you can have the percentage of used RAM
+                #print(psutil.virtual_memory().percent)
+                #print("%d bytes" % (obs.size * obs.itemsize))
+                
+                #print(sys.getsizeof(replay_buffer))
+                
                 # Take action and update exploration to the newest value
                 action = act(obs[None], update_eps=exploration.value(n_steps))[0]
                 new_obs, rew, done, _ = env.step(action)
@@ -168,21 +185,20 @@ def train_policy(arglist):
                     logger.record_tabular("mean episode reward", round(np.mean(episode_rewards[-101:-1]), 1))
                     logger.record_tabular("% time spent exploring", int(100 * exploration.value(n_steps)))
                     logger.dump_tabular()
-                    print("%s,%s,%s,%s" % (n_steps,episode,round(np.mean(episode_rewards[-101:-1]), 1),int(100 * exploration.value(n_steps))), file=log_file)
 
                 #TODO: Save checkpoints
                 if n_steps % arglist.checkpoint_rate == 0:
                     checkpoint_path = "./checkpoints/minerl_" + str(episode) + "_" + str(date.today()) + "_" + str(time.time()) + ".pkl"
                     save_variables(checkpoint_path)
-                
-        log_file.close()
+                    print("%s,%s,%s,%s" % (n_steps,episode,round(np.mean(episode_rewards[-101:-1]), 1),int(100 * exploration.value(n_steps))), file=log_file)
+        log_file.close()                 
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train DQN policy.')
-    parser.add_argument("--num-episodes", type=int, default=50000, help="number of episodes to use for training")
-    parser.add_argument("--checkpoint-rate", type=int, default=10000, help="number of episodes to use for training")
-    parser.add_argument("--replay-buffer-len", type=int, default=1000000, help="length of replay buffer")
-    parser.add_argument("--num-exploration-steps", type=int, default=25000, help="number of time steps to use for exploration")
+    parser.add_argument("--num-episodes", type=int, default=100, help="number of episodes to use for training")
+    parser.add_argument("--checkpoint-rate", type=int, default=10000, help="number of steps between checkpoints")
+    parser.add_argument("--replay-buffer-len", type=int, default=30000, help="length of replay buffer")
+    parser.add_argument("--num-exploration-steps", type=int, default=0.2, help="fraction of time steps to use for exploration")
     parser.add_argument("--learning-starts-at-steps", type=int, default=10000, help="number of time steps before learning starts")
     parser.add_argument("--target-net-update-freq", type=int, default=1000, help="update frequency of the target network")
     parser.add_argument("--final-epsilon", type=float, default=0.02, help="final epsilon")
