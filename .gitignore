@@ -1,6 +1,9 @@
 ### Our own entries
 res/MineRLNavigate-v0/
+res/MineRLNavigateDense-v0/
 res/VERSION
+res/download/
+learning_curves/
 
 ### Github part of the gitignore file
 

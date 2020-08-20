@@ -29,7 +29,7 @@ pip3 install --upgrade --user minerl
 pip3 install -e depends/baselines
 
 # Download world
-python3 scripts/download_world.py
+python3 scripts/download_demonstrations.py
 
 # Add environment variable if not existent
 if ! grep -q "MINERL_DATA_ROOT" ~/.bashrc; then\
