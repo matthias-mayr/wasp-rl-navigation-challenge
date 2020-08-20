@@ -123,6 +123,83 @@ class MineCraftWrapper:
     def reset(self):
         return self.minerl_obs_to_obs(self.minecraft_env.reset())
 
+class MineCraftWrapperSimplified:
+    """Wrap the action and observation spaces of the MineCraft environment."""
+    def __init__(self, minecraft_env):
+        self.minecraft_env = minecraft_env
+        self.action_space = Discrete(5)
+        #Actions:
+        #0: attack
+        #1: back
+        #2: camera left
+        #3: camera right
+        #4: forward
+        #5: forward and jump
+        #6: left
+        #7: right
+        #8: no-op
+        self.observation_space = Box(low=0.0, high=1.0, shape=(64, 64, 2))
+        #Observations (feature layers):
+        #Grey scale image
+        #compassAngle
+        
+    def step(self, action):
+        minerl_action = self.action_to_minerl_action(action)
+        minerl_obs, rew, done, info = self.minecraft_env.step(minerl_action)
+        return self.minerl_obs_to_obs(minerl_obs), rew, done, info
+        
+    def action_to_minerl_action(self, action):
+        minerl_action = self.minecraft_env.action_space.noop()
+        minerl_action['attack'] = 1
+        minerl_action['forward'] = 1
+        minerl_action['jump'] = 1
+    
+        if action==0:
+            minerl_action['camera'] = [0, 10.0]
+        elif action==1:
+            minerl_action['camera'] = [0, -10.0]
+        elif action==2:
+            minerl_action['left'] = 1
+        elif action==3:
+            minerl_action['right'] = 1
+            
+        return minerl_action
+
+    def minerl_action_to_action(self, minerl_action):
+        actions = []
+
+        if minerl_action['camera'][1] > 10.0:
+            actions.append(2)
+        elif minerl_action['camera'][1] < -10.0:
+            actions.append(3)
+        elif minerl_action['left'] == 1:
+            actions.append(6)
+        elif minerl_action['right'] == 1:
+            actions.append(7)
+
+        if len(actions) > 0:
+            action = random.choice(actions)
+        else:
+            action = 4
+            
+        return action
+
+    def minerl_obs_to_obs(self, minerl_obs):
+        obs = np.ones(shape=(64,64,2))
+        obs[:,:,0] = self.preprocess_image_frame(minerl_obs["pov"])
+        obs[:,:,1] = obs[:,:,1] * ((minerl_obs["compassAngle"] + 180.0)/360.0)
+
+        return obs
+        
+    def preprocess_image_frame(self, pov):
+        """Preprocess image frame given from the environment."""
+        grayscale_img = cv2.cvtColor(pov, cv2.COLOR_BGR2GRAY)
+        grayscale_img = grayscale_img.astype('float64')/255.0
+        return grayscale_img
+        
+    def reset(self):
+        return self.minerl_obs_to_obs(self.minecraft_env.reset())
+
 def q_network(input, num_actions, scope, reuse=False):
     """Build a neural network for the q function."""
     raise NotImplementedError
@@ -182,7 +259,10 @@ def train_policy(arglist):
             env = gym.make('MineRLNavigate-v0')
             env_name = "MineRLNavigate-v0"   
 
-        env = MineCraftWrapper(env)
+        if arglist.force_forward:
+            env = MineCraftWrapperSimplified(env)
+        else:
+            env = MineCraftWrapper(env)
 
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
@@ -278,6 +358,7 @@ def parse_args():
     parser.add_argument("--final-epsilon", type=float, default=0.02, help="final epsilon")
     parser.add_argument("--use-demonstrations", action="store_true", default=False)
     parser.add_argument("--use-dense-rewards", action="store_true", default=False)
+    parser.add_argument("--force-forward", action="store_true", default=False)
     return parser.parse_args()
 
 if __name__ == '__main__':
