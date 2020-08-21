@@ -26,6 +26,7 @@ from baselines.deepq.models import build_q_func
 from baselines.deepq.replay_buffer import ReplayBuffer
 from baselines.deepq.utils import ObservationInput
 from baselines.common.schedules import LinearSchedule
+from baselines.common.atari_wrappers import FrameStack
 import cv2
 
 import psutil
@@ -36,6 +37,8 @@ class MineCraftWrapper:
     """Wrap the action and observation spaces of the MineCraft environment."""
     def __init__(self, minecraft_env):
         self.minecraft_env = minecraft_env
+        self.reward_range = np.array([-100,100])
+        self.metadata = {}
         self.action_space = Discrete(9)
         #Actions:
         #0: attack
@@ -127,6 +130,8 @@ class MineCraftWrapperSimplified:
     """Wrap the action and observation spaces of the MineCraft environment."""
     def __init__(self, minecraft_env):
         self.minecraft_env = minecraft_env
+        self.reward_range = np.array([-100,100])
+        self.metadata = {}
         self.action_space = Discrete(5)
         #Actions:
         #0: attack
@@ -213,7 +218,7 @@ def load_demo_buffer(env_name, max_items):
     print("Loading demonstrations")
     print("#############################################")
     items = 0
-    for current_state, action, reward, next_state, done in data.batch_iter(batch_size=1, num_epochs=1, seq_len=30):
+    for current_state, action, reward, next_state, done in data.batch_iter(batch_size=1, num_epochs=1, seq_len=500):
         for step in range(len(reward)):
             minerl_obs = {
                 'pov': current_state['pov'][0][step],
@@ -264,6 +269,8 @@ def train_policy(arglist):
         else:
             env = MineCraftWrapper(env)
 
+        env = FrameStack(env, 4)
+
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
             make_obs_ph=lambda name: ObservationInput(env.observation_space, name=name),
@@ -282,7 +289,7 @@ def train_policy(arglist):
 
         # Create the schedule for exploration starting from 1 (every action is random) down to
         # 0.02 (98% of actions are selected according to values predicted by the model).
-        exploration = LinearSchedule(schedule_timesteps=arglist.num_exploration_steps*arglist.num_episodes*4000, initial_p=1.0, final_p=arglist.final_epsilon)
+        exploration = LinearSchedule(schedule_timesteps=arglist.num_exploration_steps*arglist.num_episodes*arglist.max_episode_steps, initial_p=1.0, final_p=arglist.final_epsilon)
 
         # Initialize the parameters and copy them to the target network.
         U.initialize()
@@ -297,16 +304,22 @@ def train_policy(arglist):
         for episode in range(arglist.num_episodes):
             print("Episode: ", str(episode))
             done = False
+            episode_steps = 0
             while not done:
                 
                 # Take action and update exploration to the newest value
                 action = act(obs[None], update_eps=exploration.value(n_steps))[0]
                 new_obs, rew, done, _ = env.step(action)
                 n_steps += 1
+                episode_steps += 1
+
+                # Break episode
+                if episode_steps > arglist.max_episode_steps:
+                    done =True
 
                 # Store transition in the replay buffer.
                 replay_buffer.add(obs, action, rew, new_obs, float(done))
-                obs = new_obs
+                obs = new_obs              
 
                 # Store rewards
                 episode_rewards[-1] += rew
@@ -349,11 +362,12 @@ def train_policy(arglist):
 
 def parse_args():
     parser = argparse.ArgumentParser(description='Train DQN policy.')
-    parser.add_argument("--num-episodes", type=int, default=100, help="number of episodes to use for training")
+    parser.add_argument("--num-episodes", type=int, default=10000, help="number of episodes to use for training") #default=100, help="number of episodes to use for training")
     parser.add_argument("--checkpoint-rate", type=int, default=10000, help="number of steps between checkpoints")
-    parser.add_argument("--replay-buffer-len", type=int, default=30000, help="length of replay buffer")
-    parser.add_argument("--num-exploration-steps", type=int, default=0.2, help="fraction of time steps to use for exploration")
+    parser.add_argument("--replay-buffer-len", type=int, default=100000, help="length of replay buffer") #default=30000, help="length of replay buffer")
+    parser.add_argument("--num-exploration-steps", type=int, default=0.4, help="fraction of time steps to use for exploration") #default=0.2, help="fraction of time steps to use for exploration")
     parser.add_argument("--learning-starts-at-steps", type=int, default=10000, help="number of time steps before learning starts")
+    parser.add_argument("--max-episode-steps", type=int, default=500, help="max number of time steps in an episode")
     parser.add_argument("--target-net-update-freq", type=int, default=1000, help="update frequency of the target network")
     parser.add_argument("--final-epsilon", type=float, default=0.02, help="final epsilon")
     parser.add_argument("--use-demonstrations", action="store_true", default=False)
