@@ -269,7 +269,9 @@ def train_policy(arglist):
         else:
             env = MineCraftWrapper(env)
 
-        env = FrameStack(env, 4)
+        if not if arglist.use_demonstrations:
+            # Use stack of last 4 frames as obs
+            env = FrameStack(env, 4)
 
         # Create all the functions necessary to train the model
         act, train, update_target, debug = deepq.build_train(
