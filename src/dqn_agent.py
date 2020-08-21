@@ -269,7 +269,7 @@ def train_policy(arglist):
         else:
             env = MineCraftWrapper(env)
 
-        if not if arglist.use_demonstrations:
+        if not arglist.use_demonstrations:
             # Use stack of last 4 frames as obs
             env = FrameStack(env, 4)
 
